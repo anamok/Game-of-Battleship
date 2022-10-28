@@ -8,7 +8,7 @@ and a Submarine (3 tiles).
 
 ### Usage Details
 
-The placement of ships **must** be entered as follows: A(A1-A5);B(B6-E6);S(H3-J3);
+The placement of ships **must** be entered as follows: A(A1-A5);B(B6-E6);S(H3-J3);  
 Remember, your ships cannot overlay or be placed outside the board. 
 
 Good luck!
