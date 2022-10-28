@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Battleship</title>
+		<script>
+			var numOfPlayers = 1;
+			var curPlayer = "";
+			var playerOne;
+			var playerTwo;
+			var mapPlayerOne = new Map();		// playerOne's ship locations
+			var mapPlayerTwo = new Map();		// playerTwo's ship locations
+			var historyOfPlayers = new Map();	// history of hits and misses for both boards
+			var reportedSunkCoords = [];		// all prev. reported sunk ships (to not report them again)
+			var pointsPlayerOne = 24;
+			var pointsPlayerTwo = 24;
+			var numOfSunkShipsP1 = 0;
+			var numOfSunkShipsP2 = 0;
+
+			document.addEventListener("DOMContentLoaded", () => {
+				// record player name and ship placement
+				document.getElementById("subButton").addEventListener("click", () => {
+					document.getElementById("errorMessage").style.display = 'none';
+					var curName = document.getElementById("playerName").value;
+					var curPlacement = document.getElementById("shipPlacement").value;
+					if (!curName || !curPlacement) {
+						document.getElementById("errorMessage").innerText = "Please enter an input";
+						document.getElementById("errorMessage").style.display = 'inline';
+						return;
+					}
+					let validPlacement = checkPlacement(curPlacement);
+					if (validPlacement != 0) {
+						document.getElementById("errorMessage").innerText = "Placement is invalid, try again";
+						document.getElementById("errorMessage").style.display = 'inline';
+						return;
+					}
+					document.getElementById("playerName").value = "";
+					document.getElementById("shipPlacement").value = "";
+					if (numOfPlayers == 1) {
+						playerOne = curName;
+						numOfPlayers++;
+						document.getElementById("playerTitle").innerText = "Player Two";
+					} else {
+						playerTwo = curName;
+
+						//start game setup		
+						document.getElementById("startPage").style.display = 'none';
+						document.getElementById("subButton").style.display = 'none';
+						switchPlayer();				
+					}
+				});
+
+				// when player okays next turn, show boards
+				document.getElementById("nextButton").addEventListener("click", () => {
+					document.getElementById("nextButton").style.display = 'none';
+					document.getElementById("popUpMessage").className = "msgWrapper";
+					document.getElementById("popUpMessage").style.display = 'none';
+					updateBoard();
+				});
+			});
+
+			// check if input is valid and if ships overlay
+			function checkPlacement(placement) {
+				let arrOne = [];
+				let arrTwo = [];
+				placement = placement.slice(0, -1);
+				let arr = placement.split(";");
+				let map = new Map();
+				let flag = false;
+				for (let i = 0; i < 3; i++) {
+					let ship = arr[i];
+					if (ship.length === 10) map.set(ship.substring(0,1), ship.substring(2,9));
+					else if (ship.length === 9) map.set(ship.substring(0,1), ship.substring(2,8));
+					else if (ship.length === 8) map.set(ship.substring(0,1), ship.substring(2,7));
+					else return 1;
+				}
+				for (let [key, value] of map.entries()) {
+					let str = value.replace(/[^0-9\-]/g,'');
+					let arrSplit = str.split("-");
+					let number = parseInt(arrSplit[1]) - parseInt(arrSplit[0]);
+					let letter;
+					if (value.length === 7) letter = value.charCodeAt(4) - value.charCodeAt(0); 
+					else letter = value.charCodeAt(3) - value.charCodeAt(0);
+					if (key === "A") {
+						if (!((number === 0 && letter === 4) || (number === 4 && letter === 0))) return 1;
+					} else if (key === "B") {
+						if (!((number === 0 && letter === 3) || (number === 3 && letter === 0))) return 1;
+					} else if (key === "S") {
+						if (!((number === 0 && letter === 2) || (number === 2 && letter === 0))) return 1;
+					} else {
+						return 1;
+					}
+					if (numOfPlayers == 1) flag = arrShips("boardOne", arrOne, arrSplit, value);
+					else flag = arrShips("boardTwo", arrTwo, arrSplit, value);
+					if (flag) return 1;
+				}
+				if (numOfPlayers == 1) {
+					mapPlayerOne.set("A", arrOne.slice(0, 5));
+					mapPlayerOne.set("B", arrOne.slice(5, 9));
+					mapPlayerOne.set("S", arrOne.slice(9, 12));
+					// console.log(mapPlayerOne);
+				} else {
+					mapPlayerTwo.set("A", arrTwo.slice(0, 5));
+					mapPlayerTwo.set("B", arrTwo.slice(5, 9));
+					mapPlayerTwo.set("S", arrTwo.slice(9, 12));
+					// console.log(mapPlayerTwo);
+				}
+				return 0;
+			}
+
+			// helper function: reports if the ships overlay, if they are placed too close, and produces coords array
+			function arrShips(boardNum, arr, arrNumbers, coordinates){
+				let start, end, str;
+				let msg = "ok";
+				if (arrNumbers[0] === arrNumbers[1]) {
+					if (coordinates.length === 7) {
+						start = coordinates.charCodeAt(0);
+						end = coordinates.charCodeAt(4);
+					} else {
+						start = coordinates.charCodeAt(0);
+						end = coordinates.charCodeAt(3);
+					}
+					for (let i = 0; i <= end-start; i++) {
+						str = boardNum + String.fromCharCode(start + i) + arrNumbers[0].toString();
+						if (arr.includes(str)) msg = "overlay";
+						else arr.push(str);
+					}
+				} else {
+					start = parseInt(arrNumbers[0]);
+					end = parseInt(arrNumbers[1]);
+					for (let i = start; i <= end; i++) {
+						str = boardNum + coordinates.charAt(0) + i.toString();
+						if (arr.includes(str)) msg = "overlay";
+						else arr.push(str);
+					}
+				}
+				if (msg === "overlay") return true;
+				return false;
+			}
+			
+			function switchPlayer() {
+				if (curPlayer === "" || curPlayer === playerTwo) curPlayer = playerOne;
+				else curPlayer = playerTwo;
+				let str = "Click to begin " + curPlayer + "'s turn";
+				document.getElementById("nextButton").innerText = str;
+				document.getElementById("nextButton").style.display = 'inline';
+				document.getElementById("plOne").style.display = 'none';
+				document.getElementById("plTwo").style.display = 'none';
+				document.getElementById("gridOne").style.display = 'none';
+				document.getElementById("gridTwo").style.display = 'none';
+			}
+
+			function fire(cell) {
+				if (historyOfPlayers.has(cell)) {
+					document.getElementById("errorMessage").innerText = "Can't fire at the same spot twice! Try again";
+					document.getElementById("errorMessage").style.display = 'inline';
+					return;
+				}
+				let arr;
+				let hit = false;
+				if (curPlayer === playerOne) {
+					for (let [key, value] of mapPlayerTwo.entries()) {
+						arr = value;
+						if (arr.includes(cell.toString())) {
+							pointsPlayerTwo -= 2;
+							hit = true;
+						}
+					}
+				} else {
+					for (let [key, value] of mapPlayerOne.entries()) {
+						arr = value;
+						if (arr.includes(cell.toString())) {
+							pointsPlayerOne -= 2;
+							hit = true;
+						}
+					}
+				}
+				if (hit) {
+					historyOfPlayers.set(cell, true);
+					let sunkShip = checkIfSunk(curPlayer);
+					let msg = "";
+					if (numOfSunkShipsP1 === 3) {
+						updateHistory();
+						gameOver(playerTwo);
+					}
+					else if (numOfSunkShipsP2 === 3) {
+						updateHistory();
+						gameOver(playerOne);
+					} 
+					else {
+						if (sunkShip != "") {
+							msg = "You sunk "
+							if (curPlayer === playerOne) msg += playerTwo;
+							else msg += playerOne;
+							msg += "'s " + sunkShip;
+							// alert(msg); // z-index overlay HERE
+						} else {
+							// alert("You hit"); // z-index overlay HERE
+							msg = "You hit";
+						}
+						document.getElementById("popUpMessage").className = "popUp";
+						document.getElementById("popUpMessage").innerText = msg;
+						document.getElementById("popUpMessage").style.display = 'block';
+						switchPlayer();
+					}
+				} else {
+					historyOfPlayers.set(cell, false);
+					// alert("You missed"); // z-index overlay HERE
+					document.getElementById("popUpMessage").className = "popUp";
+					document.getElementById("popUpMessage").innerText = "You missed";
+					document.getElementById("popUpMessage").style.display = 'block';
+					switchPlayer();
+				}
+				
+			}
+
+			function checkIfSunk(playerWhoFired) {
+				let givenShipCoordinates = [];
+				if (playerWhoFired === playerOne) {
+					for (let [key, value] of mapPlayerTwo.entries()) {
+						givenShipCoordinates = value;
+						let hitShipCoordinates = [];
+						for (let [k, v] of historyOfPlayers.entries()) {
+							if (v == true && givenShipCoordinates.includes(k) && !reportedSunkCoords.includes(k)) {
+								hitShipCoordinates.push(k);
+							}
+						}
+						// console.log("givenshipcoords: " + givenShipCoordinates);
+						// console.log("hitshipcoords: " + hitShipCoordinates);
+						if (hitShipCoordinates.length == givenShipCoordinates.length) {
+							reportedSunkCoords = reportedSunkCoords.concat(hitShipCoordinates);
+							// console.log(reportedSunkCoords);
+							numOfSunkShipsP2++;
+							if (key === 'A') return "aircraft carrier";
+							if (key === 'B') return "battleship";
+							if (key === 'S') return "submarine";
+						}
+					}
+				} else {
+					for (let [key, value] of mapPlayerOne.entries()) {
+						givenShipCoordinates = value;
+						let hitShipCoordinates = [];
+						for (let [k, v] of historyOfPlayers.entries()) {
+							if (v == true && givenShipCoordinates.includes(k) && !reportedSunkCoords.includes(k)) {
+								hitShipCoordinates.push(k);
+							}
+						}
+						// console.log("givenshipcoords: " + givenShipCoordinates);
+						// console.log("hitshipcoords: " + hitShipCoordinates);
+						if (hitShipCoordinates.length == givenShipCoordinates.length) {
+							reportedSunkCoords = reportedSunkCoords.concat(hitShipCoordinates);
+							// console.log(reportedSunkCoords);
+							numOfSunkShipsP1++;
+							if (key === 'A') return "aircraft carrier";
+							if (key === 'B') return "battleship";
+							if (key === 'S') return "submarine";
+						}
+					}
+				}
+				return "";
+			}
+
+			function updateHistory() {
+				for (let [key, value] of historyOfPlayers.entries()) {
+					if (value == true) document.getElementById(key).style.backgroundColor = "red";
+					else document.getElementById(key).style.backgroundColor = "white";
+				}
+			}
+		
+			function updateBoard() {
+				if (curPlayer === playerOne) {
+					empty("boardTwo");
+					populate("boardOne");
+					document.getElementById("gridOne").className = "gridBottom";
+					document.getElementById("gridTwo").className = "gridTop";
+					document.getElementById("plOne").innerText = playerTwo + "'s board";
+					document.getElementById("plTwo").innerText = playerOne + "'s board";
+				} else {
+					empty("boardOne");
+					populate("boardTwo");
+					document.getElementById("gridTwo").className = "gridBottom";
+					document.getElementById("gridOne").className = "gridTop";
+					document.getElementById("plOne").innerText = playerOne + "'s board";
+					document.getElementById("plTwo").innerText = playerTwo + "'s board";
+				}
+				updateHistory();
+				document.getElementById("gridOne").style.display = 'block';
+				document.getElementById("gridTwo").style.display = 'block';
+				document.getElementById("plOne").style.display = 'inline';
+				document.getElementById("plTwo").style.display = 'inline';
+			}
+
+			function populate(boardNum) {
+				if (boardNum === "boardOne") {
+					for (let [key, value] of mapPlayerOne.entries()) {
+						let arr = value;
+						for (let i = 0; i < arr.length; i++) {
+							document.getElementById(arr[i]).innerText = key;
+							document.getElementById(arr[i]).style.backgroundColor = "lightslategray";
+						}
+					}
+				} else {
+					for (let [key, value] of mapPlayerTwo.entries()) {
+						let arr = value;
+						for (let i = 0; i < arr.length; i++) {
+							document.getElementById(arr[i]).innerText = key;
+							document.getElementById(arr[i]).style.backgroundColor = "lightslategray";
+						}
+					}
+				}
+			}
+			
+			function empty(boardNum) {
+				if (boardNum === "boardOne") {
+					for (let [key, value] of mapPlayerOne.entries()) {
+						let arr = value;
+						for (let i = 0; i < arr.length; i++) {
+							document.getElementById(arr[i]).innerText = "";
+							document.getElementById(arr[i]).style.backgroundColor = "lightblue";
+						}
+					}
+				} else {
+					for (let [key, value] of mapPlayerTwo.entries()) {
+						let arr = value;
+						for (let i = 0; i < arr.length; i++) {
+							document.getElementById(arr[i]).innerText = "";
+							document.getElementById(arr[i]).style.backgroundColor = "lightblue";
+						}
+					}
+				}
+			}
+			
+			function gameOver(winner) {
+				document.getElementById("plOne").style.opacity = '0.6';
+				document.getElementById("plTwo").style.opacity = '0.6';
+				document.getElementById("gridOne").style.opacity = '0.6';
+				document.getElementById("gridTwo").style.opacity = '0.6';
+				let winMsg, loseMsg;
+				if (winner === playerOne) {
+					winMsg = playerOne + " won. They earned " + pointsPlayerOne + " points.";
+					loseMsg = playerTwo + " lost. They earned " + pointsPlayerTwo + " points.";
+				} else {
+					winMsg = playerTwo + " won. They earned " + pointsPlayerTwo + " points";
+					loseMsg = playerOne + " lost. They earned " + pointsPlayerOne + " points.";
+				}
+				document.getElementById("winText").innerText = winMsg;
+				document.getElementById("loseText").innerText = loseMsg;
+				document.getElementById("gameOverText").className = "gameOverPage";
+				document.getElementById("gameOverText").style.display = 'block';
+				document.getElementById("winText").className = "gameOverPage";
+				document.getElementById("winText").style.display = 'block';
+				document.getElementById("loseText").className = "gameOverPage";
+				document.getElementById("loseText").style.display = 'block';
+			}
+		</script>
+		<style>
+			td {
+				text-align: center;
+				background-color: lavender;
+			}
+			body {
+				background-color: lavender;
+			}
+			table#tb1 {
+				table-layout: fixed;
+				width: 40%;
+			}
+			table#tb2 {
+				table-layout: fixed;
+				width: 40%;
+			}
+			.grid {
+				align-items: center;
+				font-family: Arial;
+			}
+			.gridTop {
+				top: 50px;
+				height: 300px;
+				align-items: center;
+				text-align: center;
+				position: absolute;
+				left: 35%;
+				cursor: pointer;
+				z-index: 1;
+			}
+			.gridBottom {
+				bottom: 30px;
+				height: 300px;
+				align-items: center;
+				text-align: center;
+				position: absolute;
+				left: 35%;
+				pointer-events: none;
+				z-index: 1;
+			}
+			.gameOverPage {
+				font-family: Arial;
+				text-align: center;
+				position: relative;
+				top: 225px;
+				width: 80%;
+				padding-top: 30px;
+				padding-bottom: 30px;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				z-index: 3;
+				background: gold;
+				opacity: 0.9;
+			}
+			.popUp {
+				font-family: Arial;
+				text-align: center;
+				position: relative;
+				width: 50%;
+				left: 50%;
+				top: 30px;
+				padding-top: 30px;
+				padding-bottom: 30px;
+				transform: translate(-50%, -50%);
+				z-index: 2;
+				background: rgb(96, 146, 255);
+				opacity: 0.8;
+			}
+			#startPage {
+				text-align: center;
+			}
+			#submitButton {
+				text-align: center;
+				padding: 15px 15px;
+			}
+			#subButton {
+				cursor: pointer;
+				color: black;
+				padding: 10px 10px;
+				text-align: center;
+				border-radius: 10px;
+			}
+			#nextTurn {
+				text-align: center;
+				padding: 15px 15px;
+			}
+			#nextButton {
+				cursor: pointer;
+				color: black;
+				padding: 10px 10px;
+				text-align: center;
+				border-radius: 10px;
+				z-index: 2;
+			}
+			#gameOverText {
+				font-weight: bold;
+				font-size: x-large;
+				color: red;
+				z-index: 7;
+			}
+
+			
+		</style>
+	</head>
+	<body>
+		<div id="startPage">
+			<h1 id="welcomeMessage" style="font-family: Arial">Battleship Game</h1>
+			<h2 id="playerTitle" style="font-family: Arial">Player One</h2>
+			<p style="font-family: Arial">Enter your name:</p>
+			<input id="playerName" type="text"></input>
+			<p style="font-family: Arial">Enter your ship placement:</p>
+			<input id="shipPlacement" type="text"></input>
+		</div>
+		<div id="submitButton">
+			<button id="subButton">Submit</button>
+		</div>
+		<div class="msgWrapper">
+			<div id="popUpMessage" style="display: none">msg</div>
+		</div>
+		<div id="nextTurn">
+			<button id="nextButton" style="display: none">placeholder</button>
+		</div>
+		<div class="grid">
+			<div id="plOne" style="position: absolute; top: 20px; left: 46%; font-weight: bold; display:none">name</div>
+			<div id="plTwo" style="position: absolute; bottom: 30px; left: 46%; font-weight: bold; display:none">name</div>
+			<div id="gridOne" style="display:none">
+				<table id="tb1">
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default"></td>
+						<td style="background-color: lavender; border: none; cursor: default">A</td>
+						<td style="background-color: lavender; border: none; cursor: default">B</td>
+						<td style="background-color: lavender; border: none; cursor: default">C</td>
+						<td style="background-color: lavender; border: none; cursor: default">D</td>
+						<td style="background-color: lavender; border: none; cursor: default">E</td>
+						<td style="background-color: lavender; border: none; cursor: default">F</td>
+						<td style="background-color: lavender; border: none; cursor: default">G</td>
+						<td style="background-color: lavender; border: none; cursor: default">H</td>
+						<td style="background-color: lavender; border: none; cursor: default">I</td>
+						<td style="background-color: lavender; border: none; cursor: default">J</td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">1</td>
+						<td id="boardOneA1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneA1')"></td>
+						<td id="boardOneB1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneB1')"></td>
+						<td id="boardOneC1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneC1')"></td>
+						<td id="boardOneD1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneD1')"></td>
+						<td id="boardOneE1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneE1')"></td>
+						<td id="boardOneF1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneF1')"></td>
+						<td id="boardOneG1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneG1')"></td>
+						<td id="boardOneH1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneH1')"></td>
+						<td id="boardOneI1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneI1')"></td>
+						<td id="boardOneJ1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneJ1')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">2</td>
+						<td id="boardOneA2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneA2')"></td>
+						<td id="boardOneB2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneB2')"></td>
+						<td id="boardOneC2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneC2')"></td>
+						<td id="boardOneD2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneD2')"></td>
+						<td id="boardOneE2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneE2')"></td>
+						<td id="boardOneF2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneF2')"></td>
+						<td id="boardOneG2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneG2')"></td>
+						<td id="boardOneH2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneH2')"></td>
+						<td id="boardOneI2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneI2')"></td>
+						<td id="boardOneJ2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneJ2')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">3</td>
+						<td id="boardOneA3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneA3')"></td>
+						<td id="boardOneB3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneB3')"></td>
+						<td id="boardOneC3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneC3')"></td>
+						<td id="boardOneD3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneD3')"></td>
+						<td id="boardOneE3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneE3')"></td>
+						<td id="boardOneF3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneF3')"></td>
+						<td id="boardOneG3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneG3')"></td>
+						<td id="boardOneH3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneH3')"></td>
+						<td id="boardOneI3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneI3')"></td>
+						<td id="boardOneJ3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneJ3')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">4</td>
+						<td id="boardOneA4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneA4')"></td>
+						<td id="boardOneB4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneB4')"></td>
+						<td id="boardOneC4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneC4')"></td>
+						<td id="boardOneD4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneD4')"></td>
+						<td id="boardOneE4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneE4')"></td>
+						<td id="boardOneF4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneF4')"></td>
+						<td id="boardOneG4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneG4')"></td>
+						<td id="boardOneH4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneH4')"></td>
+						<td id="boardOneI4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneI4')"></td>
+						<td id="boardOneJ4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneJ4')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">5</td>
+						<td id="boardOneA5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneA5')"></td>
+						<td id="boardOneB5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneB5')"></td>
+						<td id="boardOneC5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneC5')"></td>
+						<td id="boardOneD5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneD5')"></td>
+						<td id="boardOneE5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneE5')"></td>
+						<td id="boardOneF5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneF5')"></td>
+						<td id="boardOneG5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneG5')"></td>
+						<td id="boardOneH5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneH5')"></td>
+						<td id="boardOneI5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneI5')"></td>
+						<td id="boardOneJ5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneJ5')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">6</td>
+						<td id="boardOneA6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneA6')"></td>
+						<td id="boardOneB6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneB6')"></td>
+						<td id="boardOneC6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneC6')"></td>
+						<td id="boardOneD6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneD6')"></td>
+						<td id="boardOneE6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneE6')"></td>
+						<td id="boardOneF6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneF6')"></td>
+						<td id="boardOneG6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneG6')"></td>
+						<td id="boardOneH6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneH6')"></td>
+						<td id="boardOneI6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneI6')"></td>
+						<td id="boardOneJ6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneJ6')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">7</td>
+						<td id="boardOneA7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneA7')"></td>
+						<td id="boardOneB7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneB7')"></td>
+						<td id="boardOneC7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneC7')"></td>
+						<td id="boardOneD7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneD7')"></td>
+						<td id="boardOneE7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneE7')"></td>
+						<td id="boardOneF7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneF7')"></td>
+						<td id="boardOneG7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneG7')"></td>
+						<td id="boardOneH7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneH7')"></td>
+						<td id="boardOneI7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneI7')"></td>
+						<td id="boardOneJ7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneJ7')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">8</td>
+						<td id="boardOneA8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneA8')"></td>
+						<td id="boardOneB8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneB8')"></td>
+						<td id="boardOneC8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneC8')"></td>
+						<td id="boardOneD8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneD8')"></td>
+						<td id="boardOneE8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneE8')"></td>
+						<td id="boardOneF8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneF8')"></td>
+						<td id="boardOneG8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneG8')"></td>
+						<td id="boardOneH8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneH8')"></td>
+						<td id="boardOneI8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneI8')"></td>
+						<td id="boardOneJ8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneJ8')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">9</td>
+						<td id="boardOneA9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneA9')"></td>
+						<td id="boardOneB9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneB9')"></td>
+						<td id="boardOneC9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneC9')"></td>
+						<td id="boardOneD9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneD9')"></td>
+						<td id="boardOneE9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneE9')"></td>
+						<td id="boardOneF9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneF9')"></td>
+						<td id="boardOneG9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneG9')"></td>
+						<td id="boardOneH9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneH9')"></td>
+						<td id="boardOneI9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneI9')"></td>
+						<td id="boardOneJ9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneJ9')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">10</td>
+						<td id="boardOneA10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneA10')"></td>
+						<td id="boardOneB10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneB10')"></td>
+						<td id="boardOneC10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneC10')"></td>
+						<td id="boardOneD10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneD10')"></td>
+						<td id="boardOneE10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneE10')"></td>
+						<td id="boardOneF10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneF10')"></td>
+						<td id="boardOneG10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneG10')"></td>
+						<td id="boardOneH10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneH10')"></td>
+						<td id="boardOneI10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneI10')"></td>
+						<td id="boardOneJ10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardOneJ10')"></td>
+					</tr>
+				</table>
+			</div>
+			<div id="gridTwo" style="display:none">
+				<table id="tb2">
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default"></td>
+						<td style="background-color: lavender; border: none; cursor: default">A</td>
+						<td style="background-color: lavender; border: none; cursor: default">B</td>
+						<td style="background-color: lavender; border: none; cursor: default">C</td>
+						<td style="background-color: lavender; border: none; cursor: default">D</td>
+						<td style="background-color: lavender; border: none; cursor: default">E</td>
+						<td style="background-color: lavender; border: none; cursor: default">F</td>
+						<td style="background-color: lavender; border: none; cursor: default">G</td>
+						<td style="background-color: lavender; border: none; cursor: default">H</td>
+						<td style="background-color: lavender; border: none; cursor: default">I</td>
+						<td style="background-color: lavender; border: none; cursor: default">J</td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">1</td>
+						<td id="boardTwoA1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoA1')"></td>
+						<td id="boardTwoB1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoB1')"></td>
+						<td id="boardTwoC1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoC1')"></td>
+						<td id="boardTwoD1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoD1')"></td>
+						<td id="boardTwoE1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoE1')"></td>
+						<td id="boardTwoF1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoF1')"></td>
+						<td id="boardTwoG1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoG1')"></td>
+						<td id="boardTwoH1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoH1')"></td>
+						<td id="boardTwoI1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoI1')"></td>
+						<td id="boardTwoJ1" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoJ1')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">2</td>
+						<td id="boardTwoA2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoA2')"></td>
+						<td id="boardTwoB2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoB2')"></td>
+						<td id="boardTwoC2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoC2')"></td>
+						<td id="boardTwoD2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoD2')"></td>
+						<td id="boardTwoE2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoE2')"></td>
+						<td id="boardTwoF2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoF2')"></td>
+						<td id="boardTwoG2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoG2')"></td>
+						<td id="boardTwoH2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoH2')"></td>
+						<td id="boardTwoI2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoI2')"></td>
+						<td id="boardTwoJ2" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoJ2')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">3</td>
+						<td id="boardTwoA3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoA3')"></td>
+						<td id="boardTwoB3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoB3')"></td>
+						<td id="boardTwoC3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoC3')"></td>
+						<td id="boardTwoD3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoD3')"></td>
+						<td id="boardTwoE3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoE3')"></td>
+						<td id="boardTwoF3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoF3')"></td>
+						<td id="boardTwoG3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoG3')"></td>
+						<td id="boardTwoH3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoH3')"></td>
+						<td id="boardTwoI3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoI3')"></td>
+						<td id="boardTwoJ3" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoJ3')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">4</td>
+						<td id="boardTwoA4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoA4')"></td>
+						<td id="boardTwoB4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoB4')"></td>
+						<td id="boardTwoC4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoC4')"></td>
+						<td id="boardTwoD4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoD4')"></td>
+						<td id="boardTwoE4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoE4')"></td>
+						<td id="boardTwoF4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoF4')"></td>
+						<td id="boardTwoG4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoG4')"></td>
+						<td id="boardTwoH4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoH4')"></td>
+						<td id="boardTwoI4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoI4')"></td>
+						<td id="boardTwoJ4" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoJ4')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">5</td>
+						<td id="boardTwoA5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoA5')"></td>
+						<td id="boardTwoB5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoB5')"></td>
+						<td id="boardTwoC5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoC5')"></td>
+						<td id="boardTwoD5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoD5')"></td>
+						<td id="boardTwoE5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoE5')"></td>
+						<td id="boardTwoF5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoF5')"></td>
+						<td id="boardTwoG5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoG5')"></td>
+						<td id="boardTwoH5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoH5')"></td>
+						<td id="boardTwoI5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoI5')"></td>
+						<td id="boardTwoJ5" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoJ5')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">6</td>
+						<td id="boardTwoA6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoA6')"></td>
+						<td id="boardTwoB6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoB6')"></td>
+						<td id="boardTwoC6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoC6')"></td>
+						<td id="boardTwoD6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoD6')"></td>
+						<td id="boardTwoE6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoE6')"></td>
+						<td id="boardTwoF6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoF6')"></td>
+						<td id="boardTwoG6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoG6')"></td>
+						<td id="boardTwoH6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoH6')"></td>
+						<td id="boardTwoI6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoI6')"></td>
+						<td id="boardTwoJ6" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoJ6')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">7</td>
+						<td id="boardTwoA7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoA7')"></td>
+						<td id="boardTwoB7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoB7')"></td>
+						<td id="boardTwoC7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoC7')"></td>
+						<td id="boardTwoD7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoD7')"></td>
+						<td id="boardTwoE7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoE7')"></td>
+						<td id="boardTwoF7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoF7')"></td>
+						<td id="boardTwoG7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoG7')"></td>
+						<td id="boardTwoH7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoH7')"></td>
+						<td id="boardTwoI7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoI7')"></td>
+						<td id="boardTwoJ7" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoJ7')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">8</td>
+						<td id="boardTwoA8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoA8')"></td>
+						<td id="boardTwoB8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoB8')"></td>
+						<td id="boardTwoC8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoC8')"></td>
+						<td id="boardTwoD8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoD8')"></td>
+						<td id="boardTwoE8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoE8')"></td>
+						<td id="boardTwoF8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoF8')"></td>
+						<td id="boardTwoG8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoG8')"></td>
+						<td id="boardTwoH8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoH8')"></td>
+						<td id="boardTwoI8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoI8')"></td>
+						<td id="boardTwoJ8" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoJ8')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">9</td>
+						<td id="boardTwoA9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoA9')"></td>
+						<td id="boardTwoB9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoB9')"></td>
+						<td id="boardTwoC9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoC9')"></td>
+						<td id="boardTwoD9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoD9')"></td>
+						<td id="boardTwoE9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoE9')"></td>
+						<td id="boardTwoF9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoF9')"></td>
+						<td id="boardTwoG9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoG9')"></td>
+						<td id="boardTwoH9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoH9')"></td>
+						<td id="boardTwoI9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoI9')"></td>
+						<td id="boardTwoJ9" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoJ9')"></td>
+					</tr>
+					<tr>
+						<td style="background-color: lavender; border: none; cursor: default">10</td>
+						<td id="boardTwoA10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoA10')"></td>
+						<td id="boardTwoB10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoB10')"></td>
+						<td id="boardTwoC10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoC10')"></td>
+						<td id="boardTwoD10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoD10')"></td>
+						<td id="boardTwoE10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoE10')"></td>
+						<td id="boardTwoF10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoF10')"></td>
+						<td id="boardTwoG10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoG10')"></td>
+						<td id="boardTwoH10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoH10')"></td>
+						<td id="boardTwoI10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoI10')"></td>
+						<td id="boardTwoJ10" style="background-color: lightblue; border: 1px solid black;" onclick="fire('boardTwoJ10')"></td>
+					</tr>
+				</table>
+			</div>
+		</div>
+		<div class="lastPage">
+			<div id="gameOverText" style="display: none">Game Over<br></div>
+			<div id="winText" style="display: none">winMsg</div>
+			<div id="loseText" style="display: none">loseMsg</div>
+		</div>
+		<div style="position: relative">
+			<p id="errorMessage" style="position: fixed; bottom: 0; width: 100%; text-align: center; font-family: Arial; color: red; display:none">msg</p>
+		</div>
+	</body>
+</html>
